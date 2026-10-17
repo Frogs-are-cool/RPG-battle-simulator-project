@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101820">
+  <title>Emberfall — RPG Battle Simulator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">A browser-based RPG</p>
+        <h1>Emberfall</h1>
+        <p class="subtitle">A small adventure. A very large number of goblins.</p>
+      </div>
+      <span class="save-badge">Saved to this browser</span>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <section class="message-log" aria-label="Adventure messages" aria-live="polite">
+          {% for category, message in messages %}
+            <p class="message message-{{ category }}">{{ message }}</p>
+          {% endfor %}
+        </section>
+      {% endif %}
+    {% endwith %}
+
+    <section class="status-grid" aria-label="Game status">
+      <article class="card player-card">
+        <p class="card-kicker">Your hero</p>
+        <h2>{{ state.player.name }} <span>· Level {{ state.player.level }}</span></h2>
+
+        <div class="meter-label">
+          <span>Health</span>
+          <span>{{ state.player.hp }} / {{ state.player.max_hp }}</span>
+        </div>
+        <progress class="meter health-meter" value="{{ state.player.hp }}"
+                  max="{{ state.player.max_hp }}">HP</progress>
+
+        {% set xp_needed = state.player.level * 25 %}
+        <div class="meter-label">
+          <span>Experience</span>
+          <span>{{ state.player.xp }} / {{ xp_needed }} XP</span>
+        </div>
+        <progress class="meter xp-meter" value="{{ state.player.xp }}"
+                  max="{{ xp_needed }}">XP</progress>
+
+        <div class="stat-row">
+          <span>Attack <strong>{{ state.player.attack }}</strong></span>
+          <span>Gold <strong>{{ state.player.gold }}</strong></span>
+        </div>
+        <p class="inventory">
+          Inventory:
+          {% if state.player.inventory %}
+            {% for item, count in state.player.inventory.items() %}
+              <span>{{ item }} × {{ count }}</span>
+            {% endfor %}
+          {% else %}
+            <span>Empty</span>
+          {% endif %}
+        </p>
+      </article>
+
+      <article class="card enemy-card">
+        <p class="card-kicker">The encounter</p>
+        {% if state.battle %}
+          {% set enemy = state.battle.enemy %}
+          <h2>{{ enemy.name }}</h2>
+          <div class="meter-label">
+            <span>Enemy health</span>
+            <span>{{ enemy.hp }} / {{ enemy.max_hp }}</span>
+          </div>
+          <progress class="meter enemy-meter" value="{{ enemy.hp }}"
+                    max="{{ enemy.max_hp }}">Enemy HP</progress>
+          <p class="encounter-copy">The enemy is watching your every move.</p>
+        {% else %}
+          <h2 class="waiting-title">No active enemy</h2>
+          <div class="empty-encounter" aria-hidden="true">⚔</div>
+          <p class="encounter-copy">Find a battle to discover who is lurking nearby.</p>
+        {% endif %}
+      </article>
+    </section>
+
+    <section class="card actions-card">
+      <div class="section-heading">
+        <div>
+          <p class="card-kicker">Your next move</p>
+          <h2>Adventure actions</h2>
+        </div>
+        <span class="action-hint">Choose an action to continue</span>
+      </div>
+
+      <form action="{{ url_for('perform_action') }}" method="post" class="action-grid">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {% if state.battle %}
+          <button class="button button-primary" name="action" value="attack">⚔ Attack</button>
+          <button class="button" name="action" value="save">Save progress</button>
+        {% else %}
+          <button class="button button-primary" name="action" value="find_battle">Find battle</button>
+          <button class="button" name="action" value="rest">Rest and heal</button>
+          <button class="button" name="action" value="use_potion"
+                  {% if state.player.inventory.get('Potion', 0) < 1 %}disabled{% endif %}>
+            Use Potion
+          </button>
+          <button class="button" name="action" value="buy_potion">Buy Potion · 10 gold</button>
+          <button class="button" name="action" value="save">Save progress</button>
+        {% endif %}
+        <button class="button button-subtle" name="action" value="new_game"
+                onclick="return confirm('Start over and replace this browser’s saved game?')">
+          New game
+        </button>
+      </form>
+    </section>
+
+    <footer>
+      Your game is stored in this browser, not shared with other players.
+    </footer>
+  </main>
+</body>
+</html>

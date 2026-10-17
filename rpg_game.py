@@ -174,62 +174,101 @@ def load_game():
 
 
 def check_level_up(player):
+    messages = []
     while player["xp"] >= player["level"] * 25:
         player["xp"] -= player["level"] * 25
         player["level"] += 1
         player["max_hp"] += 15
         player["hp"] = player["max_hp"]
         player["attack"] += 3
-        print(f"Level up! You are now level {player['level']}.")
+        messages.append(f"Level up! You are now level {player['level']}.")
+    return messages
 
 
-def start_battle(state):
+def start_battle(state, *, persist=True):
     enemy = dict(random.choice(ENEMIES))
     enemy["max_hp"] = enemy["hp"]
     state["battle"] = {"enemy": enemy}
-    print(f"\nA wild {enemy['name']} appears!")
-    save_game(state)
+    if persist:
+        save_game(state)
+    return f"A wild {enemy['name']} appears!"
 
 
-def use_item(state, item_name):
+def battle_turn(state, *, persist=True):
+    if state["battle"] is None:
+        raise ValueError("There is no active battle.")
+
+    player = state["player"]
+    enemy = state["battle"]["enemy"]
+    messages = []
+
+    damage = random.randint(max(1, player["attack"] - 3), player["attack"] + 3)
+    enemy["hp"] = max(0, enemy["hp"] - damage)
+    messages.append(f"You hit the {enemy['name']} for {damage}. (Enemy HP: {enemy['hp']})")
+    if enemy["hp"] > 0:
+        damage = random.randint(max(1, enemy["attack"] - 2), enemy["attack"] + 2)
+        player["hp"] = max(0, player["hp"] - damage)
+        messages.append(f"The {enemy['name']} hits you for {damage}. (Your HP: {player['hp']})")
+
+    if player["hp"] == 0:
+        messages.append("You were defeated. Your progress is safe; you recover with 1 HP.")
+        player["hp"] = 1
+        state["battle"] = None
+        if persist:
+            save_game(state)
+        return messages, "lost"
+
+    if enemy["hp"] == 0:
+        messages.append(f"Victory! +{enemy['xp']} XP, +{enemy['gold']} gold")
+        player["xp"] += enemy["xp"]
+        player["gold"] += enemy["gold"]
+        messages.extend(check_level_up(player))
+        state["battle"] = None
+        if persist:
+            save_game(state)
+        return messages, "won"
+
+    if persist:
+        save_game(state)
+    return messages, None
+
+
+def use_item(state, item_name, *, persist=True):
     player = state["player"]
     item_name = item_name.strip()
     if item_name not in ITEMS:
-        print(f"{item_name!r} is not a usable item.")
-        return False
+        return f"{item_name!r} is not a usable item."
     if player["inventory"].get(item_name, 0) <= 0:
-        print(f"You don't have any {item_name}.")
-        return False
+        return f"You don't have any {item_name}."
 
     item = ITEMS[item_name]
     if item["effect"] == "heal":
         old_hp = player["hp"]
         player["hp"] = min(player["max_hp"], player["hp"] + item["amount"])
-        print(f"Used a {item_name}; recovered {player['hp'] - old_hp} HP.")
+        message = f"Used a {item_name}; recovered {player['hp'] - old_hp} HP."
 
     player["inventory"][item_name] -= 1
     if player["inventory"][item_name] == 0:
         del player["inventory"][item_name]
-    save_game(state)
-    return True
+    if persist:
+        save_game(state)
+    return message
 
 
-def buy_item(state, item_name):
+def buy_item(state, item_name, *, persist=True):
     player = state["player"]
     if item_name not in ITEMS:
-        print(f"{item_name!r} is not sold here.")
-        return False
+        return f"{item_name!r} is not sold here."
 
     item = ITEMS[item_name]
     if player["gold"] < item["price"]:
-        print(f"Not enough gold for {item_name}.")
-        return False
+        return f"Not enough gold for {item_name}."
 
     player["gold"] -= item["price"]
     player["inventory"][item_name] = player["inventory"].get(item_name, 0) + 1
-    print(f"Bought a {item_name}.")
-    save_game(state)
-    return True
+    if persist:
+        save_game(state)
+    return f"Bought a {item_name}."
 
 
 def shop(state):
@@ -239,17 +278,14 @@ def shop(state):
     choice = input("Buy which item? (or 'exit')\n> ").strip()
     if choice == "exit":
         return
-    buy_item(state, choice)
+    print(buy_item(state, choice))
 
 
 def battle(state):
     if state["battle"] is None:
-        start_battle(state)
+        print(f"\n{start_battle(state)}")
 
-    player = state["player"]
-    enemy = state["battle"]["enemy"]
-
-    while enemy["hp"] > 0 and player["hp"] > 0:
+    while state["battle"] is not None:
         choice = input("1) Attack  2) Save & Quit Battle\n> ").strip()
         if choice == "2":
             save_game(state)
@@ -259,31 +295,11 @@ def battle(state):
             print("Invalid choice.")
             continue
 
-        damage = random.randint(max(1, player["attack"] - 3), player["attack"] + 3)
-        enemy["hp"] = max(0, enemy["hp"] - damage)
-        print(f"You hit the {enemy['name']} for {damage}. (Enemy HP: {enemy['hp']})")
-        if enemy["hp"] > 0:
-            damage = random.randint(max(1, enemy["attack"] - 2), enemy["attack"] + 2)
-            player["hp"] = max(0, player["hp"] - damage)
-            print(f"The {enemy['name']} hits you for {damage}. (Your HP: {player['hp']})")
-
-        if player["hp"] > 0 and enemy["hp"] > 0:
-            save_game(state)
-
-    if player["hp"] == 0:
-        print("You were defeated. Your progress is safe; you recover with 1 HP.")
-        player["hp"] = 1
-        state["battle"] = None
-        save_game(state)
-        return "lost"
-
-    print(f"Victory! +{enemy['xp']} XP, +{enemy['gold']} gold")
-    player["xp"] += enemy["xp"]
-    player["gold"] += enemy["gold"]
-    check_level_up(player)
-    state["battle"] = None
-    save_game(state)
-    return "won"
+        messages, result = battle_turn(state)
+        for message in messages:
+            print(message)
+        if result is not None:
+            return result
 
 
 def new_game_option():
@@ -350,7 +366,7 @@ def main():
             shop(state)
         elif choice == "7":
             print("Inventory:", state["player"]["inventory"])
-            use_item(state, input("Use which item?\n> "))
+            print(use_item(state, input("Use which item?\n> ")))
         else:
             print("Invalid choice.")
 
