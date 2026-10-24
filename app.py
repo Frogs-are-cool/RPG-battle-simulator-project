@@ -4,7 +4,17 @@ from datetime import timedelta
 from pathlib import Path
 import hmac
 
-from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    abort,
+    flash,
+    get_flashed_messages,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 import rpg_game as game
 
@@ -41,6 +51,13 @@ app.config.update(
     MAX_CONTENT_LENGTH=16 * 1024,
 )
 
+ENEMY_ART = {
+    "Goblin": "goblin.svg",
+    "Wolf": "wolf.svg",
+    "Orc": "orc.svg",
+    "Skeleton": "skeleton.svg",
+}
+
 
 def _get_game_state():
     raw_state = session.get("game_state")
@@ -66,7 +83,32 @@ def invalid_session(error):
 @app.get("/")
 def index():
     state = _get_game_state()
-    return render_template("index.html", state=state, csrf_token=_get_csrf_token())
+    messages = get_flashed_messages(with_categories=True)
+    categories = {category for category, _ in messages}
+    scene_event = next(
+        (
+            event
+            for category, event in (
+                ("victory", "victory"),
+                ("attack", "attack"),
+                ("encounter", "encounter"),
+                ("heal", "heal"),
+                ("potion", "heal"),
+            )
+            if category in categories
+        ),
+        "",
+    )
+    enemy = state["battle"]["enemy"] if state["battle"] else None
+    enemy_art = ENEMY_ART.get(enemy["name"]) if enemy else None
+    return render_template(
+        "index.html",
+        state=state,
+        csrf_token=_get_csrf_token(),
+        messages=messages,
+        scene_event=scene_event,
+        enemy_art=enemy_art,
+    )
 
 
 @app.post("/action")
@@ -86,28 +128,37 @@ def perform_action():
         if state["battle"] is not None:
             flash("You are already in a battle.", "warning")
         else:
-            flash(game.start_battle(state, persist=False), "battle")
+            flash(game.start_battle(state, persist=False), "encounter")
     elif action == "attack":
         if state["battle"] is None:
             flash("Find a battle before attacking.", "warning")
         else:
             messages, result = game.battle_turn(state, persist=False)
             for message in messages:
-                flash(message, "battle")
+                flash(message, "attack")
             if result == "won":
-                flash("Your rewards and progress are saved in this browser.", "success")
+                flash("Your rewards and progress are saved in this browser.", "victory")
+            elif result == "lost":
+                flash("Catch your breath, then decide your next move.", "warning")
     elif action == "rest":
         if state["battle"] is not None:
             flash("You cannot rest while an enemy is attacking.", "warning")
         else:
             recovered = player["max_hp"] - player["hp"]
             player["hp"] = player["max_hp"]
-            flash(f"You rest and recover {recovered} HP.", "success")
+            flash(
+                f"You rest and recover {recovered} HP.",
+                "heal" if recovered else "success",
+            )
     elif action == "use_potion":
         if state["battle"] is not None:
             flash("You cannot use a Potion during battle.", "warning")
         else:
-            flash(game.use_item(state, "Potion", persist=False), "info")
+            had_potion = player["inventory"].get("Potion", 0) > 0
+            flash(
+                game.use_item(state, "Potion", persist=False),
+                "potion" if had_potion else "info",
+            )
     elif action == "buy_potion":
         if state["battle"] is not None:
             flash("You cannot shop during battle.", "warning")

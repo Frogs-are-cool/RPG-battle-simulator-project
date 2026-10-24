@@ -18,15 +18,46 @@
       <span class="save-badge">Saved to this browser</span>
     </header>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <section class="message-log" aria-label="Adventure messages" aria-live="polite">
-          {% for category, message in messages %}
-            <p class="message message-{{ category }}">{{ message }}</p>
-          {% endfor %}
-        </section>
-      {% endif %}
-    {% endwith %}
+    {% if messages %}
+      <section class="message-log" aria-label="Adventure messages" aria-live="polite">
+        {% for category, message in messages %}
+          <p class="message message-{{ category }}">{{ message }}</p>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    <section class="battle-stage scene-{{ scene_event }}" aria-label="Battle scene">
+      <div class="stage-sky" aria-hidden="true"></div>
+      <div class="stage-character hero-character">
+        <div class="character-aura" aria-hidden="true"></div>
+        <img class="character-portrait hero-portrait"
+             src="{{ url_for('static', filename='characters/hero.svg') }}"
+             alt="{{ state.player.name }}, your hero">
+        <span class="character-caption">{{ state.player.name }}</span>
+        <span class="character-role">The adventurer</span>
+      </div>
+      <div class="stage-versus" aria-hidden="true"><span>VS</span></div>
+      <div class="stage-character enemy-character">
+        {% if state.battle and enemy_art %}
+          <div class="character-aura enemy-aura" aria-hidden="true"></div>
+          <img class="character-portrait enemy-portrait"
+               src="{{ url_for('static', filename='characters/' ~ enemy_art) }}"
+               alt="{{ state.battle.enemy.name }}, your opponent">
+          <span class="character-caption">{{ state.battle.enemy.name }}</span>
+          <span class="character-role">A wild foe</span>
+        {% elif state.battle %}
+          <div class="unknown-enemy" role="img"
+               aria-label="An unfamiliar enemy">?</div>
+          <span class="character-caption">{{ state.battle.enemy.name }}</span>
+          <span class="character-role">A wild foe</span>
+        {% else %}
+          <div class="empty-enemy" aria-hidden="true">⚔</div>
+          <span class="character-caption">The road ahead</span>
+          <span class="character-role">Find a battle to meet your next foe</span>
+        {% endif %}
+      </div>
+      <div class="stage-ground" aria-hidden="true"></div>
+    </section>
 
     <section class="status-grid" aria-label="Game status">
       <article class="card player-card">
@@ -78,7 +109,7 @@
           <p class="encounter-copy">The enemy is watching your every move.</p>
         {% else %}
           <h2 class="waiting-title">No active enemy</h2>
-          <div class="empty-encounter" aria-hidden="true">⚔</div>
+          <div class="empty-encounter" aria-hidden="true">The trail is quiet.</div>
           <p class="encounter-copy">Find a battle to discover who is lurking nearby.</p>
         {% endif %}
       </article>

@@ -30,6 +30,51 @@ class WebGameTests(unittest.TestCase):
         self.assertIn(b"Emberfall", response.data)
         self.assertIn(b"Find battle", response.data)
         self.assertIn(b"Health", response.data)
+        self.assertIn(b"characters/hero.svg", response.data)
+        self.assertIn(b'class="battle-stage scene-"', response.data)
+        portrait_response = self.client.get("/static/characters/hero.svg")
+        self.assertEqual(portrait_response.status_code, 200)
+        portrait_response.close()
+
+    def test_encounter_renders_enemy_art_and_arrival_animation(self):
+        with patch.object(web.game.random, "choice", return_value=web.game.ENEMIES[0]):
+            response = self.post_action("find_battle")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"characters/goblin.svg", response.data)
+        self.assertIn(b'class="battle-stage scene-encounter"', response.data)
+
+    def test_attack_renders_attack_animation(self):
+        with self.client.session_transaction() as browser_session:
+            state = web.game.new_state()
+            state["battle"] = {
+                "enemy": {
+                    "name": "Goblin",
+                    "hp": 30,
+                    "max_hp": 30,
+                    "attack": 1,
+                    "xp": 10,
+                    "gold": 5,
+                }
+            }
+            browser_session["game_state"] = state
+
+        with patch.object(web.game.random, "randint", return_value=12):
+            response = self.post_action("attack")
+
+        self.assertIn(b'class="battle-stage scene-attack"', response.data)
+
+    def test_rest_only_animates_when_it_recovers_health(self):
+        with self.client.session_transaction() as browser_session:
+            state = web.game.new_state()
+            state["player"]["hp"] = 70
+            browser_session["game_state"] = state
+
+        healed_response = self.post_action("rest")
+        self.assertIn(b'class="battle-stage scene-heal"', healed_response.data)
+
+        full_health_response = self.post_action("rest")
+        self.assertIn(b'class="battle-stage scene-"', full_health_response.data)
 
     def test_visitors_receive_independent_browser_saves(self):
         second_visitor = web.app.test_client()
@@ -66,6 +111,7 @@ class WebGameTests(unittest.TestCase):
         self.assertIsNone(state["battle"])
         self.assertEqual(state["player"]["gold"], 5)
         self.assertIn(b"Victory", response.data)
+        self.assertIn(b'class="battle-stage scene-victory"', response.data)
 
     def test_csrf_token_is_required(self):
         response = self.client.post("/action", data={"action": "rest"})

@@ -17,6 +17,9 @@ another's game. Clearing browser data clears that browser's game; progress does
 not sync between browsers or devices. Do not put passwords or other secrets in
 the game state.
 
+The browser UI includes original SVG character art and short battle, victory,
+and healing animations. Animations respect the browser's reduced-motion setting.
+
 For a local development server, `app.py` enables Flask debug mode only when run
 directly. Do not use that development server or debug mode for public hosting.
 
